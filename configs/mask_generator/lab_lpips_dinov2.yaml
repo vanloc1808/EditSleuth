@@ -1,0 +1,48 @@
+# MaskGenerator config — full three-signal stack: LAB + LPIPS + DINOv2.
+#
+# Requires the `lpips` and `dinov2` optional extras:
+#   uv sync --extra lpips --extra dinov2
+#
+# Both LPIPS and DINOv2 are significantly slower than LAB on CPU. Run on
+# a GPU by overriding their `device` fields:
+#
+#   uv run python scripts/generate_masks.py \
+#       mask_generator=lab_lpips_dinov2 \
+#       mask_generator.signals.1.device=cuda \
+#       mask_generator.signals.2.device=cuda \
+#       triplets_path=... run_tag=...
+
+_target_: edit2forensics.mask.generator.MaskGenerator
+
+signals:
+  # Signal 0: fast per-pixel color/luminance diff.
+  - _target_: edit2forensics.mask.signals.LabPixelDiff
+    normalize_percentile: 99.0
+
+  # Signal 1: perceptual/textural diff (VGG/AlexNet features).
+  - _target_: edit2forensics.mask.signals.LPIPSDiff
+    net: alex
+    device: cpu
+    min_side: 224
+    normalize_percentile: 99.0
+
+  # Signal 2: semantic diff (DINOv2 patch features).
+  - _target_: edit2forensics.mask.signals.DINOv2Diff
+    backbone: dinov2_vits14
+    device: cpu
+    image_size: 448
+    normalize_percentile: 99.0
+
+combiner:
+  _target_: edit2forensics.mask.combiners.MaxCombiner
+
+config:
+  _target_: edit2forensics.mask.generator.MaskGeneratorConfig
+  min_side_for_processing: 64
+  allow_resize_align: true
+  global_area_threshold: 0.90
+  global_mean_threshold: 0.4
+  ambiguous_area_threshold: 0.005
+  morph_disk_radius: 2
+  min_component_area_frac: 0.001
+  skip_refinement_on_global: true

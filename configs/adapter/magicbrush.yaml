@@ -1,0 +1,36 @@
+# Adapter config for MagicBrush (osunlp/MagicBrush on HuggingFace).
+#
+# Unlike Pico-Banana which reads from a local JSONL, MagicBrush is loaded
+# via `datasets.load_dataset`. Images arrive in memory and must be
+# materialized to disk once; the `cache_root` controls where.
+
+_target_: edit2forensics.adapters.magicbrush.MagicBrushAdapter
+
+# Tag used in output filenames (includes split to prevent collisions when
+# a later run materializes both splits into the same output_root).
+source_dataset_tag: magicbrush_${adapter.split}
+
+# Root for materialized PNGs. A per-split subdirectory is created inside.
+cache_root: ${paths.output_root}/source_images
+
+# 'train' (8,807 turns) or 'dev' (528 turns). The test split is not on HF.
+split: train
+
+# HuggingFace repo id; override for forks / local mirrors.
+hf_repo: osunlp/MagicBrush
+
+# Optional HF datasets cache dir. Null uses the library default
+# (~/.cache/huggingface/datasets), which is usually fine.
+hf_cache_dir: null
+
+# When true, only keep turn_index == 1. Turns >= 2 have previously-edited
+# images as their "source", which may or may not be desirable depending
+# on your downstream use. See docstring for discussion.
+single_turn_only: false
+
+# Optional cap for smoke testing.
+max_records: null
+
+# Re-materialize existing cache files. Rarely needed; set true only when
+# you've changed the PIL->PNG conversion logic.
+skip_if_exists: true

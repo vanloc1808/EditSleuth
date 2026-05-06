@@ -1,0 +1,47 @@
+# MaskGenerator config — signals and tuning knobs.
+#
+# Hydra instantiates the whole tree in one call: signals become a list of
+# DiffSignal instances, config becomes a MaskGeneratorConfig, and the
+# outer object is a MaskGenerator. Ablations are straightforward Hydra
+# overrides, e.g.:
+#
+#   mask_generator.config.global_area_threshold=0.8
+#   mask_generator.signals.0.normalize_percentile=95
+#
+# Adding a new signal (later, e.g. LPIPS) is a one-line list append in a
+# config override.
+
+_target_: edit2forensics.mask.generator.MaskGenerator
+
+signals:
+  - _target_: edit2forensics.mask.signals.LabPixelDiff
+    normalize_percentile: 99.0
+
+# Strategy for collapsing per-signal maps into the single combined map
+# fed to thresholding. MaxCombiner (default) preserves any-signal
+# detection; MeanCombiner requires agreement across signals. See
+# combiners.py for the caveat about retuning `global_mean_threshold`
+# when switching to mean-pool.
+combiner:
+  _target_: edit2forensics.mask.combiners.MaxCombiner
+
+config:
+  _target_: edit2forensics.mask.generator.MaskGeneratorConfig
+  # Images with min-side smaller than this are upscaled before processing.
+  min_side_for_processing: 64
+  # If real and edited differ in shape, resize edited to match real.
+  # When False, the pair is flagged with registration_ok=False.
+  allow_resize_align: true
+  # Mask area >= this fraction -> classified as global (whole-image) edit.
+  global_area_threshold: 0.90
+  # Mean combined-diff >= this value -> pre-classified as global, bypassing
+  # Otsu (which would subdivide a uniformly-high map into meaningless bins).
+  global_mean_threshold: 0.4
+  # Mask area <= this fraction -> ambiguous (edit too small).
+  ambiguous_area_threshold: 0.005
+  # Morphological structuring element radius.
+  morph_disk_radius: 2
+  # Drop connected components smaller than this fraction of image area.
+  min_component_area_frac: 0.001
+  # Skip opening/closing when the initial mask is already global.
+  skip_refinement_on_global: true

@@ -1,0 +1,44 @@
+# MaskGenerator config — LAB pixel diff + (1 - SSIM) structural diff.
+#
+# A CPU-only alternative to lab_plus_lpips. SSIMDiff catches *local
+# structural* changes (object swaps, replaced regions, inpainting whose
+# statistics don't match) while being invariant to global luminance
+# and contrast shifts. LAB and SSIM are complementary by design: LAB
+# detects color/luminance changes, SSIM detects structural changes.
+#
+# Requires no optional extras — pure scikit-image.
+#
+# Usage:
+#   uv run python scripts/generate_masks.py \
+#       mask_generator=lab_plus_ssim \
+#       triplets_path=... run_tag=...
+#
+# Use this config when:
+# * No GPU is available (LPIPS would be slow on CPU).
+# * You want a fully CPU-deterministic pipeline.
+# * You're running the lab_plus_lpips vs lab_plus_ssim ablation.
+
+_target_: edit2forensics.mask.generator.MaskGenerator
+
+signals:
+  - _target_: edit2forensics.mask.signals.LabPixelDiff
+    normalize_percentile: 99.0
+
+  - _target_: edit2forensics.mask.signals.SSIMDiff
+    gaussian_weights: true
+    sigma: 1.5
+    normalize_percentile: 99.0
+
+combiner:
+  _target_: edit2forensics.mask.combiners.MaxCombiner
+
+config:
+  _target_: edit2forensics.mask.generator.MaskGeneratorConfig
+  min_side_for_processing: 64
+  allow_resize_align: true
+  global_area_threshold: 0.90
+  global_mean_threshold: 0.4
+  ambiguous_area_threshold: 0.005
+  morph_disk_radius: 2
+  min_component_area_frac: 0.001
+  skip_refinement_on_global: true

@@ -1,0 +1,15 @@
+# Paths configuration.
+#
+# Override these for your local setup, e.g.:
+#   python scripts/ingest.py paths.dataset_root=/data/pico-banana-400k
+#
+# Or create configs/paths/local.yaml and select it with `paths=local`.
+
+# Root where pipeline artifacts are written (parquet indices, masks, etc.).
+output_root: ${oc.env:E2F_OUTPUT_ROOT,/home/pyone/Projects/editsleuth/outputs}
+
+# Root for downloaded real images when adapter.download_missing=true.
+download_cache: ${paths.output_root}/downloads
+
+# Root of the extracted source dataset (overridden per-adapter).
+dataset_root: /home/pyone/Projects/picobanana

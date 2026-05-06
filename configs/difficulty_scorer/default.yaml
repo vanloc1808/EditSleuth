@@ -1,0 +1,30 @@
+# DifficultyScorer config — components, weights, and instruction scorer.
+#
+# Defaults follow the design document:
+#   structural_change      0.30
+#   perceptual_change      0.30
+#   locality               0.20
+#   instruction_complexity 0.20
+#
+# Recalibrate via the calibrate_difficulty_weights.py script after
+# collecting manual easy/medium/hard labels on a sample.
+
+_target_: edit2forensics.difficulty.scorer.DifficultyScorer
+
+instruction_scorer:
+  _target_: edit2forensics.difficulty.instruction.RuleBasedInstructionComplexity
+  length_saturation: 25
+  verb_saturation: 3
+  conjunction_saturation: 2
+  spatial_saturation: 2
+  feature_weights: [0.25, 0.25, 0.25, 0.25]
+
+config:
+  _target_: edit2forensics.difficulty.scorer.DifficultyScorerConfig
+  weights:
+    structural_change: 0.30
+    perceptual_change: 0.30
+    locality: 0.20
+    instruction_complexity: 0.20
+  ssim_image_size: 256
+  ssim_data_range: 1.0

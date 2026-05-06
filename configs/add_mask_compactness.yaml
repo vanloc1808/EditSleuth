@@ -1,0 +1,25 @@
+# Augment a Stage B mask-artifacts parquet directory with mask compactness.
+#
+# Usage:
+#   uv run python scripts/add_mask_compactness.py \
+#     mask_artifacts_path=artifacts/mask_artifacts/pico_banana_lab_lpips_ssim_calibrated.parquet \
+#     output_path=artifacts/mask_artifacts/pico_banana_lab_lpips_ssim_calibrated_with_compactness.parquet
+
+defaults:
+  - paths: default
+  - _self_
+
+mask_artifacts_path: ???
+output_path: ???
+
+# By default, output shards already on disk are skipped (resumable runs).
+# Set to true to force regeneration.
+overwrite_existing_shards: false
+
+log_level: INFO
+
+hydra:
+  run:
+    dir: ${paths.output_root}/hydra_runs/add_mask_compactness/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

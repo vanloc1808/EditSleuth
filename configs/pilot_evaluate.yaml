@@ -1,0 +1,34 @@
+# Pilot evaluation configuration: run a fine-tuned LoRA adapter on the
+# held-out evaluation set and report category / spatial / bin metrics.
+#
+# Usage:
+#   uv run python scripts/pilot_evaluate.py \
+#     triplets_parquet=artifacts/triplets/magicbrush_dev.parquet \
+#     reasoning_parquet=artifacts/reasoning/magicbrush_dev.parquet \
+#     adapter_path=artifacts/pilot/chain_run \
+#     target_mode=chain \
+#     output_path=artifacts/pilot/chain_eval.json
+
+defaults:
+  - paths: default
+  - _self_
+
+triplets_parquet: ???
+reasoning_parquet: ???
+adapter_path: ???
+output_path: ???
+
+target_mode: chain               # ``chain`` or ``label_only``
+base_model: Qwen/Qwen2-VL-2B-Instruct
+
+eval_max_n: null                 # null = full set; else cap at N rows for quick checks
+image_max_side: 448
+max_new_tokens: 256
+
+log_level: INFO
+
+hydra:
+  run:
+    dir: ${output_path}.hydra_runs/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

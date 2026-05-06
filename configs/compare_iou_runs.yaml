@@ -1,0 +1,38 @@
+# Paired-bootstrap significance test for two mask-validation runs.
+#
+# Usage:
+#   uv run python scripts/compare_iou_runs.py \
+#     run_a.label=lab_lpips \
+#     run_a.report_path=artifacts/reports/mask_val_lab_lpips.per_triplet.parquet \
+#     run_b.label=lab_lpips_ssim \
+#     run_b.report_path=artifacts/reports/mask_val_lab_lpips_ssim.per_triplet.parquet \
+#     output_report=artifacts/reports/iou_bootstrap_lab_lpips_vs_lab_lpips_ssim.json
+
+defaults:
+  - paths: default
+  - _self_
+
+run_a:
+  label: ???                # short tag, e.g. "lab_lpips"
+  report_path: ???          # path to *.per_triplet.parquet from evaluate_masks.py
+
+run_b:
+  label: ???                # short tag, e.g. "lab_lpips_ssim"
+  report_path: ???
+
+# Number of bootstrap resamples. 10,000 is the conventional default
+# and gives stable percentile CIs; 1,000 is fine for quick checks.
+n_iter: 10000
+
+# Reproducibility seed. Same seed + inputs => identical CI.
+seed: 0
+
+output_report: ${paths.output_root}/reports/iou_bootstrap.json
+
+log_level: INFO
+
+hydra:
+  run:
+    dir: ${paths.output_root}/hydra_runs/compare_iou_runs/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

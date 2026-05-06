@@ -1,0 +1,89 @@
+# MaskGenerator config — LAB + LPIPS + (1 - SSIM), calibrated for Pico-Banana.
+#
+# Identical to lab_plus_lpips_plus_ssim.yaml except for
+# global_mean_threshold, which is raised from the MagicBrush-calibrated
+# default of 0.40 to 0.62 — the value that produces ~30% Path-1 global
+# classification rate on the full 257K-triplet Pico-Banana dataset.
+#
+# RECOMMENDED PRODUCTION CONFIG ON PICO-BANANA. The 3-signal stack
+# beat the 2-signal lab+lpips on MagicBrush dev (IoU 0.730 vs 0.717,
+# paired-bootstrap p < 0.0001, 95% CI [0.0085, 0.0164]) with the
+# improvement concentrated on local-edit triplets. Cross-validation on
+# Pico-Banana (via compare_mask_runs.py) showed the third signal
+# produces meaningfully different masks; threshold calibration was the
+# remaining piece needed to deploy on this dataset.
+#
+# Calibration source
+# ------------------
+# Threshold sweep run via scripts/sweep_global_threshold.py on the
+# previously-generated lab_lpips_ssim Stage B output. The fine sweep
+# (step=0.01 across [0.60, 0.65]) reported a Path-1 global rate of
+# 0.304 at threshold 0.62 — 0.4 percentage points above the 30% target,
+# the closest match in the searched range.
+#
+# At the original threshold of 0.40, this config classified 80% of
+# Pico-Banana triplets as global — over-promoting roughly two-thirds
+# of what should have been local edits. The over-promotion was
+# entirely from Path 1 (mean-threshold pre-routing); Path 2 (Otsu
+# post-thresholding area check) contributed effectively zero extra
+# globals. So a single threshold change fully addresses the issue.
+#
+# Why the threshold differs from the 2-signal configs
+# ---------------------------------------------------
+# Adding a signal under max-pool monotonically inflates combined.mean()
+# by a roughly uniform additive offset. From the threshold-sweep data:
+#   lab_ssim:        cdm.mean = 0.429, calibrated threshold 0.52
+#   lab_lpips:       cdm.mean = 0.465, calibrated threshold 0.56
+#   lab_lpips_ssim:  cdm.mean = 0.530, calibrated threshold 0.62
+# The threshold offsets (+0.04, +0.06) match the cdm.mean shifts
+# (+0.036, +0.065) almost exactly. Each config's threshold compensates
+# for max-pool inflation rather than for any signal-specific quirk.
+#
+# Requires the `lpips` optional extra:
+#   uv sync --extra lpips
+#
+# Usage:
+#   uv run python scripts/generate_masks.py \
+#       mask_generator=lab_plus_lpips_plus_ssim_pico_banana \
+#       mask_generator.signals.1.device=cuda \
+#       mask_generator.signals.1.batch_size=32 \
+#       triplets_path=artifacts/triplets/pico_banana.parquet \
+#       run_tag=pico_banana_lab_lpips_ssim_calibrated
+
+_target_: edit2forensics.mask.generator.MaskGenerator
+
+signals:
+  # Signal 0: per-pixel color difference in LAB.
+  - _target_: edit2forensics.mask.signals.LabPixelDiff
+    normalize_percentile: 99.0
+
+  # Signal 1: perceptual difference via LPIPS (deep features).
+  # batch_size controls the GPU-batched compute path. 16 is a safe
+  # default for an 8-12GB GPU; raise to 32-64 on larger cards.
+  - _target_: edit2forensics.mask.signals.LPIPSDiff
+    net: alex
+    device: cpu
+    min_side: 224
+    normalize_percentile: 99.0
+    batch_size: 16
+
+  # Signal 2: structural difference via (1 - SSIM).
+  - _target_: edit2forensics.mask.signals.SSIMDiff
+    gaussian_weights: true
+    sigma: 1.5
+    normalize_percentile: 99.0
+
+combiner:
+  _target_: edit2forensics.mask.combiners.MaxCombiner
+
+config:
+  _target_: edit2forensics.mask.generator.MaskGeneratorConfig
+  min_side_for_processing: 64
+  allow_resize_align: true
+  global_area_threshold: 0.90
+  # Raised from 0.40 (MagicBrush) to 0.62 (Pico-Banana). See header.
+  global_mean_threshold: 0.62
+  ambiguous_area_threshold: 0.005
+  morph_disk_radius: 2
+  min_component_area_frac: 0.001
+  skip_refinement_on_global: true

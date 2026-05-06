@@ -1,0 +1,23 @@
+# Top-level config for difficulty-weight calibration.
+#
+# Usage:
+#   uv run python scripts/calibrate_difficulty_weights.py \
+#       difficulty_path=/path/to/artifacts/difficulty/magicbrush_dev.parquet \
+#       labels_path=/path/to/manual_labels.json \
+#       output_path=/path/to/artifacts/reports/calibrated_weights.json
+
+defaults:
+  - paths: default
+  - _self_
+
+difficulty_path: ???
+labels_path: ???
+output_path: ${paths.output_root}/reports/calibrated_weights.json
+
+log_level: INFO
+
+hydra:
+  run:
+    dir: ${paths.output_root}/hydra_runs/calibrate_difficulty/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

@@ -1,0 +1,54 @@
+# Top-level config for Stage B (mask generation).
+#
+# Usage:
+#   uv run python scripts/generate_masks.py \
+#       triplets_path=/path/to/artifacts/triplets/pico_banana.parquet \
+#       paths.output_root=/path/to/artifacts
+#
+# Or to run on the MagicBrush dev split (which gives us validatable masks):
+#   uv run python scripts/generate_masks.py \
+#       triplets_path=/path/to/artifacts/triplets/magicbrush_dev.parquet \
+#       paths.output_root=/path/to/artifacts
+
+defaults:
+  - paths: default
+  - mask_generator: default
+  - _self_
+
+# Parquet dataset directory produced by scripts/ingest.py.
+triplets_path: ???
+
+# Tag used in output path interpolation. Required — typically matches the
+# ingest output name, e.g. "pico_banana" or "magicbrush_dev".
+run_tag: ???
+
+# Where to write mask PNGs. One file per triplet.
+masks_root: ${paths.output_root}/masks/${run_tag}
+
+# Where to write the MaskArtifact parquet shards.
+output_path: ${paths.output_root}/mask_artifacts/${run_tag}.parquet
+
+write_batch_size: 10000
+log_level: INFO
+
+# Process only this subset of input shard indices. null = all shards.
+# Used by parallel launchers to give each worker a disjoint slice.
+# Example: shard_indices=[0,3,6,9] processes shards 0, 3, 6, 9 only.
+shard_indices: null
+
+# By default, output shards already on disk are skipped (resumable runs).
+# Set to true to force regeneration.
+overwrite_existing_shards: false
+
+# Driver-side triplet batch size for the GPU-batched code path. When
+# any LPIPS signal is in the stack, this is overridden by the LPIPS
+# batch_size at runtime (since LPIPS is the dominant cost). For pure
+# CPU stacks (LAB-only, LAB+SSIM), batching at the driver level
+# doesn't help — leave this at 1.
+driver_batch_size: 1
+
+hydra:
+  run:
+    dir: ${paths.output_root}/hydra_runs/generate_masks/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

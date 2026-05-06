@@ -1,0 +1,23 @@
+# DifficultyScorerV2 config — three-component formula with mask compactness.
+#
+# V2 weights: structural_change 0.55, compactness_score 0.25, instruction_complexity 0.20
+# See src/edit2forensics/difficulty/scorer_v2.py for the design rationale.
+
+_target_: edit2forensics.difficulty.scorer_v2.DifficultyScorerV2
+
+instruction_scorer:
+  _target_: edit2forensics.difficulty.instruction.RuleBasedInstructionComplexity
+  length_saturation: 25
+  verb_saturation: 3
+  conjunction_saturation: 2
+  spatial_saturation: 2
+  feature_weights: [0.25, 0.25, 0.25, 0.25]
+
+config:
+  _target_: edit2forensics.difficulty.scorer_v2.DifficultyScorerV2Config
+  weights:
+    structural_change: 0.55
+    compactness_score: 0.25
+    instruction_complexity: 0.20
+  ssim_image_size: 256
+  ssim_data_range: 1.0

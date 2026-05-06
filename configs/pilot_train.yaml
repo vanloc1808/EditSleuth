@@ -1,0 +1,98 @@
+# Pilot fine-tuning configuration: LoRA on Qwen2-VL-2B-Instruct.
+#
+# Two target modes (chain vs label_only) share this config; switch
+# via target_mode= on the command line.
+#
+# Usage:
+#   uv run python scripts/pilot_train.py \
+#     triplets_parquet=artifacts/triplets/pico_banana.parquet \
+#     reasoning_parquet=artifacts/reasoning/pico_banana.parquet \
+#     target_mode=chain \
+#     output_dir=artifacts/pilot/chain_run
+
+defaults:
+  - paths: default
+  - _self_
+
+triplets_parquet: ???
+reasoning_parquet: ???
+output_dir: ???
+
+# --- target mode (the pilot's only varying knob) -----------------------
+target_mode: chain         # ``chain`` or ``label_only``
+
+# --- dataset stratification --------------------------------------------
+samples_per_category_per_bin: 600
+# 11 non-other categories * 3 bins * 600 = 19,800 training examples.
+# Reduce for faster iteration; raise for stronger fits.
+seed: 0
+image_max_side: 448
+
+# --- base model --------------------------------------------------------
+base_model: Qwen/Qwen2-VL-2B-Instruct
+
+# --- LoRA hyperparameters ----------------------------------------------
+lora_r: 16
+lora_alpha: 32
+lora_dropout: 0.05
+# LoRA target modules. Two formats accepted:
+#   - A list of strings: PEFT does substring match against every
+#     parameter name. Simple but matches BOTH the vision encoder's
+#     and the language model's q_proj/v_proj on multi-modal models.
+#     This caused gradient NaN in our environment.
+#   - A single regex string: PEFT treats this as a full-pattern
+#     regex. Use this to restrict LoRA to specific paths.
+#
+# Default: regex that matches the language model's self-attention
+# projections but skips the vision encoder. Qwen2-VL's vision
+# encoder uses ``visual.blocks.{N}.attn.q_proj`` (with ``attn``,
+# not ``self_attn``); the language model uses
+# ``model.layers.{N}.self_attn.q_proj``. The regex below matches
+# only the latter.
+lora_target_modules: "^(?!.*visual).*self_attn\\.(q_proj|v_proj)$"
+
+# --- training schedule -------------------------------------------------
+num_train_epochs: 1
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 8       # effective batch = 16
+learning_rate: 1.0e-4
+warmup_ratio: 0.03
+logging_steps: 25
+save_steps: 1000
+save_total_limit: 2
+report_to: none                       # set to "wandb" / "tensorboard" if desired
+
+# --- numerical precision and memory ----------------------------------
+# bf16 vs fp32 trade-off:
+#
+#   bf16=true  : faster (~2x) and uses ~half the VRAM, but produces
+#                NaN gradients on step 1 of training in our environment
+#                (Qwen2-VL-2B + PEFT LoRA + TRL SFTTrainer). Forward
+#                pass works; the model successfully computes a
+#                healthy cross-entropy of 2.687, but backward yields
+#                NaN, corrupting LoRA weights at the optimizer step.
+#                The cause is bf16 precision in the model's reverse
+#                pass through certain LM ops; LoRA targeting and
+#                padding side and gradient checkpointing all
+#                reproduce the same NaN with bf16=true.
+#
+#   bf16=false : training works correctly. Loss descends, gradient
+#                norm is finite (~0.8), token accuracy is stable.
+#                Slower and more VRAM-hungry but numerically robust.
+#
+# Default: false. On an H100/A100 the speed cost is acceptable at
+# pilot scale (~10 hours per training config instead of ~5).
+#
+# gradient_checkpointing is also off by default. Re-enabling it
+# triggers the LoRA + checkpointing input-grad requirement (handled
+# by the script). At fp32 with H100 VRAM, checkpointing isn't needed.
+bf16: false
+gradient_checkpointing: false
+
+log_level: INFO
+
+hydra:
+  run:
+    dir: ${output_dir}/hydra_runs/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

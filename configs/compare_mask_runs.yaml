@@ -1,0 +1,48 @@
+# Compare two mask-artifact parquets to see where signal configurations
+# disagree. Uses no GT masks — operates on relative behavior between the
+# two runs only.
+#
+# Usage:
+#   uv run python scripts/compare_mask_runs.py \
+#     run_a.label=lab_only \
+#     run_a.mask_artifacts_path=/path/to/artifacts/mask_artifacts/pico_banana_lab.parquet \
+#     run_b.label=lab_lpips \
+#     run_b.mask_artifacts_path=/path/to/artifacts/mask_artifacts/pico_banana.parquet \
+#     output_report=/path/to/artifacts/reports/mask_comparison_lab_vs_labLpips.json
+
+defaults:
+  - paths: default
+  - _self_
+
+run_a:
+  label: ???                     # short tag, e.g. "lab_only"
+  mask_artifacts_path: ???       # parquet directory
+
+run_b:
+  label: ???                     # short tag, e.g. "lab_lpips"
+  mask_artifacts_path: ???       # parquet directory
+
+# Number of triplets to sample for pairwise IoU on each subset
+# (`both_local` and `disputed`). The IoU pass loads two mask PNGs per
+# sampled triplet. Set to -1 to compute over the full subset (slow on
+# Pico-Banana scale: ~25 minutes for 200K rows; recommended only for
+# final/headline numbers). 5000 is a good default — standard error
+# on the mean IoU estimate is ~0.005 at that sample size.
+iou_sample_size: 5000
+
+# Cap on the number of disputed-triplet records embedded in the report
+# for spot-checking by ID. Full disputed analysis would use the input
+# parquets directly.
+disputed_list_cap: 50
+
+seed: 0
+
+output_report: ${paths.output_root}/reports/mask_comparison.json
+
+log_level: INFO
+
+hydra:
+  run:
+    dir: ${paths.output_root}/hydra_runs/compare_mask_runs/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

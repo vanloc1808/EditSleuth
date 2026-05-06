@@ -1,0 +1,28 @@
+# Top-level config for the ingestion stage.
+#
+# Usage:
+#   uv run python scripts/ingest.py \
+#       adapter=pico_banana \
+#       paths.dataset_root=/path/to/pico-banana-400k
+#
+# Add `adapter.max_records=100` for a smoke test.
+
+defaults:
+  - paths: default
+  - adapter: pico_banana
+  - _self_
+
+# Where to write the output parquet of EditTriplets.
+output_path: ${paths.output_root}/triplets/${adapter.source_dataset_tag}.parquet
+
+# Batch size for parquet writing. Higher = fewer flushes, more memory.
+write_batch_size: 10000
+
+# Logging verbosity for the ingest run.
+log_level: INFO
+
+hydra:
+  run:
+    dir: ${paths.output_root}/hydra_runs/ingest/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

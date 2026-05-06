@@ -1,0 +1,40 @@
+# Adapter config for Pico-Banana-400K.
+#
+# The `_target_` field lets Hydra instantiate the adapter directly via
+# `hydra.utils.instantiate`, keeping the ingest script free of adapter-
+# specific import logic.
+
+_target_: edit2forensics.adapters.pico_banana.PicoBananaAdapter
+
+# Tag used in output filenames. Kept here (rather than introspected from
+# the class) so Hydra can interpolate it into top-level paths.
+source_dataset_tag: pico_banana
+
+# Absolute path to the JSONL manifest file.
+manifest_path: ${paths.dataset_root}/sft_with_local_source_image_path.jsonl
+
+# Root under which `local_input_image` and `output_image` resolve.
+dataset_root: ${paths.dataset_root}
+
+# When the real image is missing on disk, fall back to downloading
+# `open_image_input_url`. Default off for reproducibility — flip to true
+# explicitly when you've decided the run should include downloads.
+download_missing: false
+
+# Cache directory for downloaded real images. Required when
+# `download_missing=true`.
+download_cache: ${paths.download_cache}
+
+# Optional cap for smoke tests. Set to null to ingest the full manifest.
+max_records: null
+
+# Policy for records that share an `output_image` path with another
+# record in the manifest:
+#   "drop_all"   - drop every record involved (default; conservative).
+#   "keep_first" - keep the first manifest occurrence, drop the rest.
+# Pico-Banana's manifest contains a small number of such collisions,
+# and on inspection the colliding records are corrupted (instructions
+# don't match the output images). drop_all is the recommended setting;
+# only switch to keep_first if you have evidence the first occurrence
+# is reliable on your specific data slice.
+on_output_collision: drop_all

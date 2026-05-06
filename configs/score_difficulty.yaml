@@ -1,0 +1,43 @@
+# Top-level config for Stage C (difficulty scoring).
+#
+# Usage:
+#   uv run python scripts/score_difficulty.py \
+#       triplets_path=/path/to/artifacts/triplets/magicbrush_dev.parquet \
+#       mask_artifacts_path=/path/to/artifacts/mask_artifacts/magicbrush_dev.parquet \
+#       run_tag=magicbrush_dev \
+#       paths.output_root=/path/to/artifacts
+
+defaults:
+  - paths: default
+  - difficulty_scorer: default
+  - _self_
+
+triplets_path: ???
+mask_artifacts_path: ???
+
+# Tag used for output filenames; should match Stage B's run_tag.
+run_tag: ???
+
+output_path: ${paths.output_root}/difficulty/${run_tag}.parquet
+summary_path: ${paths.output_root}/reports/difficulty_summary_${run_tag}.json
+
+write_batch_size: 5000
+log_level: INFO
+
+# Parallelism knobs — see scripts/score_difficulty.py docstring.
+# `shard_indices`: process only the listed input shard indices (null = all).
+# `run_pass1` / `run_pass2`: independently toggle the per-shard scoring
+# pass (pass 1) and the dataset-level tertile-binning pass (pass 2).
+# Parallel workflow: launch N workers each with `run_pass2=false` and a
+# disjoint shard_indices slice, then run once with `run_pass1=false` and
+# null shard_indices to assign bins over the merged output.
+shard_indices: null
+run_pass1: true
+run_pass2: true
+overwrite_existing_shards: false
+
+hydra:
+  run:
+    dir: ${paths.output_root}/hydra_runs/score_difficulty/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

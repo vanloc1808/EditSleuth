@@ -1,0 +1,57 @@
+# MaskGenerator config — LAB + LPIPS, calibrated for Pico-Banana.
+#
+# Identical to lab_plus_lpips.yaml except for global_mean_threshold,
+# which is raised from the MagicBrush-calibrated default of 0.40 to
+# 0.56, the value that produces ~29% Path-1 global classification rate
+# on the full 257K-triplet Pico-Banana dataset.
+#
+# Calibration source
+# ------------------
+# Threshold sweep run via scripts/sweep_global_threshold.py on the
+# previously-generated lab_lpips Stage B output. The sweep reported a
+# Path-1 global rate of 0.291 at threshold 0.56 — within 1 percentage
+# point of the 30% target, which corresponds to the upper end of
+# Pico-Banana's plausible genuine-global edit fraction.
+#
+# At the original threshold of 0.40, this config classified 67% of
+# triplets as global on Pico-Banana — over-promoting roughly two-
+# thirds of what should have been local edits. The calibrated threshold
+# corrects this for downstream Stage C analysis.
+#
+# Requires the `lpips` optional extra:
+#   uv sync --extra lpips
+#
+# Usage:
+#   uv run python scripts/generate_masks.py \
+#       mask_generator=lab_plus_lpips_pico_banana \
+#       mask_generator.signals.1.device=cuda \
+#       triplets_path=artifacts/triplets/pico_banana.parquet \
+#       run_tag=pico_banana_lab_lpips_calibrated
+
+_target_: edit2forensics.mask.generator.MaskGenerator
+
+signals:
+  - _target_: edit2forensics.mask.signals.LabPixelDiff
+    normalize_percentile: 99.0
+
+  - _target_: edit2forensics.mask.signals.LPIPSDiff
+    net: alex
+    device: cpu
+    min_side: 224
+    normalize_percentile: 99.0
+    batch_size: 16
+
+combiner:
+  _target_: edit2forensics.mask.combiners.MaxCombiner
+
+config:
+  _target_: edit2forensics.mask.generator.MaskGeneratorConfig
+  min_side_for_processing: 64
+  allow_resize_align: true
+  global_area_threshold: 0.90
+  # Raised from 0.40 (MagicBrush) to 0.56 (Pico-Banana). See header.
+  global_mean_threshold: 0.56
+  ambiguous_area_threshold: 0.005
+  morph_disk_radius: 2
+  min_component_area_frac: 0.001
+  skip_refinement_on_global: true

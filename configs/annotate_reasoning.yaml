@@ -1,0 +1,35 @@
+# Stage E entry point: generate per-triplet reasoning chains.
+#
+# Usage:
+#   uv run python scripts/annotate_reasoning.py \
+#     triplets_path=artifacts/triplets/pico_banana.parquet \
+#     mask_artifacts_path=artifacts/mask_artifacts/pico_banana_with_compactness.parquet \
+#     difficulty_path=artifacts/difficulty/pico_banana_v2.parquet \
+#     category_path=artifacts/categories/pico_banana.parquet \
+#     run_tag=pico_banana \
+#     paths.output_root=artifacts
+
+defaults:
+  - paths: default
+  - reasoning_annotator: default
+  - _self_
+
+triplets_path: ???
+mask_artifacts_path: ???
+difficulty_path: ???
+category_path: ???
+run_tag: ???
+
+output_path: ${paths.output_root}/reasoning/${run_tag}.parquet
+summary_path: ${paths.output_root}/reports/reasoning_summary_${run_tag}.json
+
+shard_indices: null
+overwrite_existing_shards: false
+
+log_level: INFO
+
+hydra:
+  run:
+    dir: ${paths.output_root}/hydra_runs/annotate_reasoning/${run_tag}/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

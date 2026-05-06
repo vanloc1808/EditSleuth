@@ -1,0 +1,23 @@
+# Top-level config for mask validation against GT masks.
+#
+# Usage:
+#   uv run python scripts/evaluate_masks.py \
+#       triplets_path=/path/to/artifacts/triplets/magicbrush_dev.parquet \
+#       mask_artifacts_path=/path/to/artifacts/mask_artifacts/magicbrush_dev.parquet \
+#       output_report=/path/to/artifacts/reports/mask_val_magicbrush_dev.json
+
+defaults:
+  - paths: default
+  - _self_
+
+triplets_path: ???
+mask_artifacts_path: ???
+output_report: ${paths.output_root}/reports/mask_validation.json
+
+log_level: INFO
+
+hydra:
+  run:
+    dir: ${paths.output_root}/hydra_runs/evaluate_masks/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

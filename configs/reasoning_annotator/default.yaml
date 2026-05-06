@@ -1,0 +1,10 @@
+# Default ReasoningAnnotator config.
+#
+# Stateless annotator with default spatial-descriptor thresholds.
+
+_target_: edit2forensics.reasoning.annotator.ReasoningAnnotator
+
+config:
+  _target_: edit2forensics.reasoning.annotator.ReasoningAnnotatorConfig
+  central_margin: 0.25
+  scattered_threshold: 0.3

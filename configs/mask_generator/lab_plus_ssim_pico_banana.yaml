@@ -1,0 +1,53 @@
+# MaskGenerator config — LAB + (1 - SSIM), calibrated for Pico-Banana.
+#
+# Identical to lab_plus_ssim.yaml except for global_mean_threshold,
+# which is raised from the MagicBrush-calibrated default of 0.40 to
+# 0.52, the value that produces ~30% Path-1 global classification rate
+# on the full 257K-triplet Pico-Banana dataset.
+#
+# Calibration source
+# ------------------
+# Threshold sweep run via scripts/sweep_global_threshold.py on the
+# previously-generated lab_ssim Stage B output. The sweep reported a
+# Path-1 global rate of 0.284 at threshold 0.52 — within 2 percentage
+# points of the 30% target, which corresponds to the upper end of
+# Pico-Banana's plausible genuine-global edit fraction (style transfers,
+# photo-to-cartoon, modern↔historical, time-of-day shifts, etc.).
+#
+# At the original threshold of 0.40, this config classified 59% of
+# triplets as global on Pico-Banana — over-promoting roughly half of
+# what should have been local edits. The calibrated threshold corrects
+# this for downstream Stage C analysis where mask_area_frac concentrated
+# at 1.0 would otherwise dominate the difficulty score's locality term.
+#
+# Usage:
+#   uv run python scripts/generate_masks.py \
+#       mask_generator=lab_plus_ssim_pico_banana \
+#       triplets_path=artifacts/triplets/pico_banana.parquet \
+#       run_tag=pico_banana_lab_ssim_calibrated
+
+_target_: edit2forensics.mask.generator.MaskGenerator
+
+signals:
+  - _target_: edit2forensics.mask.signals.LabPixelDiff
+    normalize_percentile: 99.0
+
+  - _target_: edit2forensics.mask.signals.SSIMDiff
+    gaussian_weights: true
+    sigma: 1.5
+    normalize_percentile: 99.0
+
+combiner:
+  _target_: edit2forensics.mask.combiners.MaxCombiner
+
+config:
+  _target_: edit2forensics.mask.generator.MaskGeneratorConfig
+  min_side_for_processing: 64
+  allow_resize_align: true
+  global_area_threshold: 0.90
+  # Raised from 0.40 (MagicBrush) to 0.52 (Pico-Banana). See header.
+  global_mean_threshold: 0.52
+  ambiguous_area_threshold: 0.005
+  morph_disk_radius: 2
+  min_component_area_frac: 0.001
+  skip_refinement_on_global: true

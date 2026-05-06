@@ -1,0 +1,11 @@
+# CategoryClassifier — default config.
+#
+# Uses Pico-Banana label mapping for triplets carrying source labels
+# and rule-based instruction analysis otherwise.
+
+_target_: edit2forensics.category.classifier.CategoryClassifier
+
+# Confidence assigned when a Pico-Banana source label exists but isn't
+# in the canonical map. Default 0.5 reflects "we know there is some
+# structured category we just can't map."
+unknown_label_confidence: 0.5

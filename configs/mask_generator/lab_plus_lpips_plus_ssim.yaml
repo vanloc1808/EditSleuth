@@ -1,0 +1,52 @@
+# MaskGenerator config — LAB + LPIPS + (1 - SSIM).
+#
+# Three-signal stack for the "does SSIM catch anything LPIPS misses?"
+# ablation. Costs the LPIPS forward pass on top of a CPU SSIM
+# computation; SSIM is fast enough (single-image-pair seconds) that
+# it's a small marginal cost over lab_plus_lpips.
+#
+# Requires the `lpips` optional extra:
+#   uv sync --extra lpips
+#
+# Usage:
+#   uv run python scripts/generate_masks.py \
+#       mask_generator=lab_plus_lpips_plus_ssim \
+#       mask_generator.signals.1.device=cuda \
+#       triplets_path=... run_tag=...
+
+_target_: edit2forensics.mask.generator.MaskGenerator
+
+signals:
+  # Signal 0: per-pixel color difference in LAB.
+  - _target_: edit2forensics.mask.signals.LabPixelDiff
+    normalize_percentile: 99.0
+
+  # Signal 1: perceptual difference via LPIPS (deep features).
+  # batch_size controls the GPU-batched compute path. 16 is a safe
+  # default for an 8-12GB GPU; raise to 32-64 on larger cards.
+  - _target_: edit2forensics.mask.signals.LPIPSDiff
+    net: alex
+    device: cpu
+    min_side: 224
+    normalize_percentile: 99.0
+    batch_size: 16
+
+  # Signal 2: structural difference via (1 - SSIM).
+  - _target_: edit2forensics.mask.signals.SSIMDiff
+    gaussian_weights: true
+    sigma: 1.5
+    normalize_percentile: 99.0
+
+combiner:
+  _target_: edit2forensics.mask.combiners.MaxCombiner
+
+config:
+  _target_: edit2forensics.mask.generator.MaskGeneratorConfig
+  min_side_for_processing: 64
+  allow_resize_align: true
+  global_area_threshold: 0.90
+  global_mean_threshold: 0.4
+  ambiguous_area_threshold: 0.005
+  morph_disk_radius: 2
+  min_component_area_frac: 0.001
+  skip_refinement_on_global: true

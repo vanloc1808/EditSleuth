@@ -1,0 +1,59 @@
+# MaskGenerator config — three signals with MEAN-POOL combiner.
+#
+# Diagnostic ablation for the design document's "when does a signal not
+# help?" discussion. If MeanCombiner reverses the DINOv2 regression seen
+# with MaxCombiner on MagicBrush-dev, the issue is signal-noise
+# amplification by max-pool, not DINOv2 itself.
+#
+# Requires both optional extras:
+#   uv sync --extra lpips --extra dinov2
+#
+# Usage:
+#   uv run python scripts/generate_masks.py \
+#       mask_generator=lab_lpips_dinov2_mean \
+#       mask_generator.signals.1.device=cuda \
+#       mask_generator.signals.2.device=cuda \
+#       triplets_path=... run_tag=..._mean
+#
+# IMPORTANT: the scope-routing thresholds below were calibrated for
+# max-pool. With mean-pool the combined map is compressed by 1/S, so
+# `global_mean_threshold` is proportionally lower. See combiners.py
+# docstring for details.
+
+_target_: edit2forensics.mask.generator.MaskGenerator
+
+signals:
+  - _target_: edit2forensics.mask.signals.LabPixelDiff
+    normalize_percentile: 99.0
+
+  - _target_: edit2forensics.mask.signals.LPIPSDiff
+    net: alex
+    device: cpu
+    min_side: 224
+    normalize_percentile: 99.0
+
+  - _target_: edit2forensics.mask.signals.DINOv2Diff
+    backbone: dinov2_vits14
+    device: cpu
+    image_size: 224
+    normalize_percentile: 99.0
+
+combiner:
+  _target_: edit2forensics.mask.combiners.MeanCombiner
+
+config:
+  _target_: edit2forensics.mask.generator.MaskGeneratorConfig
+  min_side_for_processing: 64
+  allow_resize_align: true
+  global_area_threshold: 0.90
+  # Retuned for mean-pool: max-pool calibration was 0.4 across one
+  # saturating signal; for 3-signal mean-pool the equivalent "most of
+  # the image changed" evidence lives near 0.4 / 3 ~= 0.13. We set it
+  # to 0.15 as a safe margin. If Otsu is doing most of the work on your
+  # data (rather than the early global-detection branch), this knob
+  # rarely matters in practice.
+  global_mean_threshold: 0.15
+  ambiguous_area_threshold: 0.005
+  morph_disk_radius: 2
+  min_component_area_frac: 0.001
+  skip_refinement_on_global: true

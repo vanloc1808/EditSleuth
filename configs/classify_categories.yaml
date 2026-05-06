@@ -1,0 +1,29 @@
+# Stage D entry point: classify each triplet's edit category.
+#
+# Usage:
+#   uv run python scripts/classify_categories.py \
+#     triplets_path=artifacts/triplets/pico_banana.parquet \
+#     paths.output_root=artifacts \
+#     run_tag=pico_banana
+
+defaults:
+  - paths: default
+  - category_classifier: default
+  - _self_
+
+triplets_path: ???
+run_tag: ???
+
+output_path: ${paths.output_root}/categories/${run_tag}.parquet
+summary_path: ${paths.output_root}/reports/category_summary_${run_tag}.json
+
+shard_indices: null
+overwrite_existing_shards: false
+
+log_level: INFO
+
+hydra:
+  run:
+    dir: ${paths.output_root}/hydra_runs/classify_categories/${run_tag}/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false

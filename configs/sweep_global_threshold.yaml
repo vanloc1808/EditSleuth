@@ -1,0 +1,51 @@
+# Sweep global_mean_threshold over existing mask-artifact parquets.
+#
+# Usage (note the `+` prefix — Hydra "add new key" idiom for the runs
+# dict, which we leave open so any number of runs can be specified):
+#   uv run python scripts/sweep_global_threshold.py \
+#     +runs.lab_ssim=artifacts/mask_artifacts/pico_banana_lab_ssim.parquet \
+#     +runs.lab_lpips=artifacts/mask_artifacts/pico_banana_lab_lpips.parquet \
+#     +runs.lab_lpips_ssim=artifacts/mask_artifacts/pico_banana_lab_lpips_ssim.parquet \
+#     output_report=artifacts/reports/threshold_sweep.json
+
+defaults:
+  - paths: default
+  - _self_
+
+# Map of {run_label: path_to_mask_artifacts_parquet}. Specified per-run
+# on the CLI; we don't pre-define labels here.
+runs: {}
+
+# Step size for the threshold sweep. 0.05 gives 21 thresholds in
+# [0.0, 1.0]. Use a finer step (e.g. 0.025) if you need to tune in
+# on a specific operating point.
+threshold_step: 0.05
+
+# Override `threshold_step` by specifying an explicit list of
+# thresholds to sweep. Useful for very fine-grained tuning around a
+# known target.
+thresholds: null
+
+# Target Path-1 global rates for candidate-threshold selection.
+# For each target, the script reports the smallest swept threshold
+# whose Path-1 global rate is at or below the target.
+#
+# 0.25-0.40 covers the plausible band of "genuinely global edits" on
+# Pico-Banana (style transfers, photo→cartoon, time-of-day, etc.);
+# 0.50 is a softer ceiling for datasets with more global edits.
+target_rates:
+  - 0.25
+  - 0.30
+  - 0.35
+  - 0.40
+  - 0.50
+
+output_report: ${paths.output_root}/reports/threshold_sweep.json
+
+log_level: INFO
+
+hydra:
+  run:
+    dir: ${paths.output_root}/hydra_runs/sweep_global_threshold/${now:%Y-%m-%d_%H-%M-%S}
+  job:
+    chdir: false
