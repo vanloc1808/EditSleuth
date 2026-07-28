@@ -25,8 +25,8 @@ download URL into the repository.
 ```bash
 uv run python scripts/setup_editsleuth_release.py \
   --file-id GOOGLE_DRIVE_FILE_ID \
-  --archive editsleuth_data.tar.gz \
-  --output-dir editsleuth_data/release
+  --archive /srv/vanloc/editsleuth_data.tar.gz \
+  --output-dir /srv/vanloc/editsleuth_data/release
 ```
 
 The extractor refuses to merge into a non-empty release directory.
@@ -39,7 +39,7 @@ images and manifests come from Apple's CDN.
 
 ```bash
 uv run python scripts/download_pico_banana.py \
-  --root /data/pico-banana-400k \
+  --root /srv/vanloc/data/pico-banana-400k \
   --workers 16
 ```
 
@@ -54,15 +54,39 @@ Expected paths include:
 The downloader is resumable at the file level. Use `--keep-archives` if the
 Open Images tarballs should remain after successful extraction.
 
-## 4. Run the instruction-masked pilot
+## 4. Download MagicBrush dev
+
+The instruction-masked models are evaluated on the 528-row MagicBrush dev
+split. A newly allocated server must materialize these images before launching
+the experiment:
+
+```bash
+uv run python scripts/prepare_magicbrush_dev.py \
+  --root /srv/vanloc/data/magicbrush \
+  --annotations editsleuth_data/release/magicbrush_dev_annotations.parquet
+```
+
+This downloads `osunlp/MagicBrush` through Hugging Face and writes the exact
+paths referenced by the release:
+
+```text
+/srv/vanloc/data/magicbrush/dev/magicbrush_dev_<id>_t<turn>__real.png
+/srv/vanloc/data/magicbrush/dev/magicbrush_dev_<id>_t<turn>__edited.png
+/srv/vanloc/data/magicbrush/dev/magicbrush_dev_<id>_t<turn>__mask.png
+```
+
+The command finishes by checking every `real_path` and `edited_path` in the
+release Parquet. It is resumable because existing non-empty PNGs are retained.
+
+## 5. Run the instruction-masked pilot
 
 The chain and label-only runs train concurrently on GPUs 0 and 1. Evaluation
 runs on GPU 2 after both adapters finish:
 
 ```bash
 bash scripts/run_instruction_masked_ablation.sh \
-  /data/pico-banana-400k \
-  /data/magicbrush \
+  /srv/vanloc/data/pico-banana-400k \
+  /srv/vanloc/data/magicbrush \
   outputs/rebuttal/instruction_masked
 ```
 
@@ -77,7 +101,7 @@ For a quick pipeline check, invoke each training command directly with:
 samples_per_category_per_bin=1
 ```
 
-## 5. Audit 200 reasoning traces
+## 6. Audit 200 reasoning traces
 
 Create a deterministic 67/67/66 easy/medium/hard sample:
 

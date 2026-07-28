@@ -3,8 +3,8 @@
 #
 # Usage:
 #   uv run python scripts/pilot_evaluate.py \
-#     triplets_parquet=artifacts/triplets/magicbrush_dev.parquet \
-#     reasoning_parquet=artifacts/reasoning/magicbrush_dev.parquet \
+#     annotations_parquet=editsleuth_data/release/magicbrush_dev_annotations.parquet \
+#     image_root=/srv/vanloc/data/magicbrush \
 #     adapter_path=artifacts/pilot/chain_run \
 #     target_mode=chain \
 #     output_path=artifacts/pilot/chain_eval.json
