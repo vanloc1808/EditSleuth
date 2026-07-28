@@ -1,0 +1,106 @@
+# Rebuttal experiment workflow
+
+All annotation inputs in this workflow come from `editsleuth_data/release`.
+The `external/editsleuth` tree is not used.
+
+## 1. Install server dependencies
+
+```bash
+conda activate base
+pip install -e . gdown
+```
+
+The server must also have the AWS CLI:
+
+```bash
+aws --version
+```
+
+## 2. Download the EditSleuth release
+
+Pass the public Google Drive file ID; do not commit the ID or a generated
+download URL into the repository.
+
+```bash
+python scripts/setup_editsleuth_release.py \
+  --file-id GOOGLE_DRIVE_FILE_ID \
+  --archive editsleuth_data.tar.gz \
+  --output-dir editsleuth_data/release
+```
+
+The extractor refuses to merge into a non-empty release directory.
+
+## 3. Download Pico-Banana
+
+This follows Apple's official alternative to Flickr: source images come from
+the two packed Open Images S3 archives using unsigned AWS CLI requests. Edited
+images and manifests come from Apple's CDN.
+
+```bash
+python scripts/download_pico_banana.py \
+  --root /data/pico-banana-400k \
+  --workers 16
+```
+
+Expected paths include:
+
+```text
+/data/pico-banana-400k/openimages/train_0/<image-id>.jpg
+/data/pico-banana-400k/openimages/train_1/<image-id>.jpg
+/data/pico-banana-400k/images/positive-edit/<edit-id>.png
+```
+
+The downloader is resumable at the file level. Use `--keep-archives` if the
+Open Images tarballs should remain after successful extraction.
+
+## 4. Run the instruction-masked pilot
+
+The chain and label-only runs train concurrently on GPUs 0 and 1. Evaluation
+runs on GPU 2 after both adapters finish:
+
+```bash
+bash scripts/run_instruction_masked_ablation.sh \
+  /data/pico-banana-400k \
+  /data/magicbrush \
+  outputs/rebuttal/instruction_masked
+```
+
+Both variants receive the original and edited images but not the instruction.
+For chain training, Step 1 is replaced by a fixed withheld-instruction marker;
+otherwise the loss would require reproducing text deliberately absent from the
+input. Steps 2–6 are unchanged.
+
+For a quick pipeline check, invoke each training command directly with:
+
+```text
+samples_per_category_per_bin=1
+```
+
+## 5. Audit 200 reasoning traces
+
+Create a deterministic 67/67/66 easy/medium/hard sample:
+
+```bash
+python scripts/audit_reasoning_traces.py sample \
+  --input editsleuth_data/release/pico_banana_annotations.parquet \
+  --output outputs/rebuttal/trace_audit_200.csv \
+  --n 200 \
+  --seed 2026
+```
+
+For each step, an annotator fills:
+
+- `step_N_correct`: `yes`, `no`, or `unclear`
+- `step_N_error_type`: a consistent error taxonomy
+- `step_N_notes`: concise evidence for the judgment
+
+After all judgments are complete:
+
+```bash
+python scripts/audit_reasoning_traces.py report \
+  --input outputs/rebuttal/trace_audit_200.csv \
+  --output outputs/rebuttal/trace_audit_200_report.json
+```
+
+The report includes overall and per-difficulty error rates for every step,
+complete-chain accuracy, unclear counts, and the first failing step per trace.

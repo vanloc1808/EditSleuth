@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -53,9 +54,9 @@ class CurriculumDatasetConfig:
 
     samples_per_category_per_bin: int = 600
     """Stratified-sample size: each (category, difficulty_bin) cell
-    contributes this many triplets to the training set. With 11
-    non-``other`` categories and 3 bins, the default produces
-    ~20K training examples."""
+    contributes this many triplets to the training set. With 10
+    Pico-Banana categories and 3 bins, the default produces
+    18K training examples."""
 
     seed: int = 0
     """Random seed for stratified sampling. Held fixed so the pilot
@@ -64,6 +65,14 @@ class CurriculumDatasetConfig:
     image_max_side: int = 448
     """Long-side resize for images before feeding to the VLM. 448 is
     a typical input resolution for Qwen2-VL-2B."""
+
+    include_instruction: bool = True
+    """Whether the edit instruction is exposed in the user prompt."""
+
+    redact_instruction_target: bool = True
+    """When the instruction is withheld, replace chain Step 1 with a
+    fixed redaction marker so the model is not trained to reconstruct
+    hidden text."""
 
 
 class EditSleuthCurriculumDataset(_BASE):
@@ -100,20 +109,31 @@ class EditSleuthCurriculumDataset(_BASE):
 
     def __init__(
         self,
-        triplets_parquet: Path,
-        reasoning_parquet: Path,
+        triplets_parquet: Path | None = None,
+        reasoning_parquet: Path | None = None,
         config: CurriculumDatasetConfig | None = None,
+        *,
+        annotations_parquet: Path | None = None,
+        image_root: Path | None = None,
     ) -> None:
         self.config = config or CurriculumDatasetConfig()
 
-        log.info("loading triplets and reasoning artifacts")
-        triplets_df = self._load_parquet_dataset(triplets_parquet)
-        reasoning_df = self._load_parquet_dataset(reasoning_parquet)
-
-        # Inner join: only triplets that made it through Stage E.
-        df = triplets_df.merge(
-            reasoning_df, on="triplet_id", how="inner", suffixes=("", "_r"),
-        )
+        if annotations_parquet is not None:
+            log.info("loading joined release annotations: %s", annotations_parquet)
+            df = pd.read_parquet(annotations_parquet)
+            df = self._normalize_release_annotations(df, image_root)
+        else:
+            if triplets_parquet is None or reasoning_parquet is None:
+                raise ValueError(
+                    "provide annotations_parquet, or both triplets_parquet "
+                    "and reasoning_parquet"
+                )
+            log.info("loading triplets and reasoning artifacts")
+            triplets_df = self._load_parquet_dataset(triplets_parquet)
+            reasoning_df = self._load_parquet_dataset(reasoning_parquet)
+            df = triplets_df.merge(
+                reasoning_df, on="triplet_id", how="inner", suffixes=("", "_r"),
+            )
         log.info("joined: %d triplets with reasoning artifacts", len(df))
 
         # Drop "other" — pilot doesn't include the unclassified residual.
@@ -138,6 +158,41 @@ class EditSleuthCurriculumDataset(_BASE):
             len(sampled), self.config.target_mode,
         )
         self.records = sampled.to_dict("records")
+
+    @staticmethod
+    def _normalize_release_annotations(
+        df: pd.DataFrame,
+        image_root: Path | None,
+    ) -> pd.DataFrame:
+        """Map the public joined release schema to the pilot schema."""
+        required = {
+            "triplet_id", "real_path", "edited_path", "instruction",
+            "reasoning_chain", "reasoning_category",
+            "reasoning_difficulty_bin", "reasoning_spatial_descriptor",
+        }
+        missing = required - set(df.columns)
+        if missing:
+            raise ValueError(
+                f"release annotations missing required columns: {sorted(missing)}"
+            )
+        if image_root is None:
+            raise ValueError(
+                "image_root is required with annotations_parquet because "
+                "release image paths are relative"
+            )
+        root = Path(image_root).expanduser().resolve()
+        out = df.copy()
+        out["real_path"] = out["real_path"].map(
+            lambda value: str(root / str(value))
+        )
+        out["edited_path"] = out["edited_path"].map(
+            lambda value: str(root / str(value))
+        )
+        out["chain"] = out["reasoning_chain"]
+        out["category"] = out["reasoning_category"]
+        out["difficulty_bin"] = out["reasoning_difficulty_bin"]
+        out["spatial_descriptor"] = out["reasoning_spatial_descriptor"]
+        return out
 
     @staticmethod
     def _load_parquet_dataset(path: Path) -> pd.DataFrame:
@@ -213,7 +268,23 @@ class EditSleuthCurriculumDataset(_BASE):
         reasoning.
         """
         if self.config.target_mode == "chain":
-            return rec["chain"]
+            chain = rec["chain"]
+            if (
+                not self.config.include_instruction
+                and self.config.redact_instruction_target
+            ):
+                chain, replacements = re.subn(
+                    r"\A1\. .*?(?=^2\. )",
+                    "1. The edit instruction is withheld for this ablation.\n",
+                    chain,
+                    count=1,
+                    flags=re.DOTALL | re.MULTILINE,
+                )
+                if replacements != 1:
+                    raise ValueError(
+                        f"cannot redact malformed chain for {rec['triplet_id']}"
+                    )
+            return chain
         # label_only
         return json.dumps({
             "category": rec["category"],

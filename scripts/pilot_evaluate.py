@@ -14,8 +14,8 @@ the inference loop accordingly.
 Usage::
 
     uv run python scripts/pilot_evaluate.py \\
-        triplets_parquet=artifacts/triplets/magicbrush_dev.parquet \\
-        reasoning_parquet=artifacts/reasoning/magicbrush_dev.parquet \\
+        annotations_parquet=editsleuth_data/release/magicbrush_dev_annotations.parquet \\
+        image_root=/data/magicbrush \\
         adapter_path=artifacts/pilot/chain_run \\
         target_mode=chain \\
         output_path=artifacts/pilot/chain_eval.json
@@ -30,6 +30,8 @@ from pathlib import Path
 import hydra
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
+
+from edit2forensics.pilot_prompt import format_user_turn
 
 log = logging.getLogger(__name__)
 
@@ -208,9 +210,9 @@ def main(cfg: DictConfig) -> None:
     )
 
     # ---- load held-out evaluation set ---------------------------------
-    triplets_df = _load_parquet_dir(Path(cfg.triplets_parquet))
-    reasoning_df = _load_parquet_dir(Path(cfg.reasoning_parquet))
-    eval_df = triplets_df.merge(reasoning_df, on="triplet_id", how="inner")
+    eval_df = _load_release_annotations(
+        Path(cfg.annotations_parquet), Path(cfg.image_root),
+    )
     if cfg.eval_max_n is not None and cfg.eval_max_n > 0:
         eval_df = eval_df.head(int(cfg.eval_max_n))
     log.info("evaluating on %d held-out triplets", len(eval_df))
@@ -235,24 +237,12 @@ def main(cfg: DictConfig) -> None:
             log.info("%d / %d", i, len(eval_df))
         real_img = _load_resized(rec["real_path"], cfg.image_max_side)
         edited_img = _load_resized(rec["edited_path"], cfg.image_max_side)
-        prompt_messages = [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "image", "image": real_img},
-                    {"type": "image", "image": edited_img},
-                    {
-                        "type": "text",
-                        "text": (
-                            f"You are a forensic image-edit detector. Given a "
-                            f"(real, edited) image pair and the edit instruction, "
-                            f"produce a structured analysis of the edit.\n\n"
-                            f"Instruction: \"{rec.get('instruction', '')}\""
-                        ),
-                    },
-                ],
-            },
-        ]
+        prompt_messages = format_user_turn(
+            real_img,
+            edited_img,
+            rec.get("instruction", ""),
+            cfg.include_instruction,
+        )
         text = processor.apply_chat_template(
             prompt_messages, tokenize=False, add_generation_prompt=True,
         )
@@ -290,6 +280,7 @@ def main(cfg: DictConfig) -> None:
     summary = {
         "n": int(len(metrics_df)),
         "target_mode": cfg.target_mode,
+        "include_instruction": bool(cfg.include_instruction),
         "category_accuracy": float(metrics_df["category_match"].mean()),
         "spatial_descriptor_accuracy": float(metrics_df["spatial_match"].mean()),
         "difficulty_bin_accuracy": float(metrics_df["bin_match"].mean()),
@@ -315,11 +306,24 @@ def main(cfg: DictConfig) -> None:
     log.info("summary at %s; per-row predictions at %s", out_path, rows_path)
 
 
-def _load_parquet_dir(path: Path) -> pd.DataFrame:
-    shards = sorted(path.glob("part-*.parquet"))
-    if not shards:
-        raise FileNotFoundError(f"no parquet shards under {path}")
-    return pd.concat([pd.read_parquet(s) for s in shards], ignore_index=True)
+def _load_release_annotations(path: Path, image_root: Path) -> pd.DataFrame:
+    df = pd.read_parquet(path)
+    root = image_root.expanduser().resolve()
+    required = {
+        "triplet_id", "real_path", "edited_path", "instruction",
+        "reasoning_category", "reasoning_spatial_descriptor",
+        "reasoning_difficulty_bin",
+    }
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(f"release annotations missing: {sorted(missing)}")
+    df = df.copy()
+    df["real_path"] = df["real_path"].map(lambda p: str(root / str(p)))
+    df["edited_path"] = df["edited_path"].map(lambda p: str(root / str(p)))
+    df["category"] = df["reasoning_category"]
+    df["spatial_descriptor"] = df["reasoning_spatial_descriptor"]
+    df["difficulty_bin"] = df["reasoning_difficulty_bin"]
+    return df
 
 
 def _load_resized(path_str: str, max_side: int):

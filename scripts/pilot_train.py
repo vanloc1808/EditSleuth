@@ -19,10 +19,11 @@ with a multi-GPU framework.
 Usage::
 
     uv run python scripts/pilot_train.py \\
-        triplets_parquet=artifacts/triplets/pico_banana.parquet \\
-        reasoning_parquet=artifacts/reasoning/pico_banana.parquet \\
+        annotations_parquet=editsleuth_data/release/pico_banana_annotations.parquet \\
+        image_root=/data/pico-banana-400k \\
+        include_instruction=false \\
         target_mode=chain \\
-        output_dir=artifacts/pilot/chain_run
+        output_dir=outputs/pilot/chain_instruction_masked
 
 Environment requirements (install with ``uv sync --extra pilot``):
     transformers >= 4.45
@@ -38,6 +39,8 @@ from pathlib import Path
 
 import hydra
 from omegaconf import DictConfig, OmegaConf
+
+from edit2forensics.pilot_prompt import format_user_turn
 
 log = logging.getLogger(__name__)
 
@@ -61,45 +64,17 @@ def _check_pilot_deps() -> None:
         )
 
 
-def _format_user_turn(
-    real_image,
-    edited_image,
-    instruction: str,
-):
-    """Build the user-turn message only (no assistant response).
-
-    Used at training time to measure the prompt-prefix length so we
-    can mask it out of the loss; used at inference time to feed the
-    model and let it generate the assistant response.
-    """
-    return [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "image": real_image},
-                {"type": "image", "image": edited_image},
-                {
-                    "type": "text",
-                    "text": (
-                        f"You are a forensic image-edit detector. Given a "
-                        f"(real, edited) image pair and the edit instruction, "
-                        f"produce a structured analysis of the edit.\n\n"
-                        f"Instruction: \"{instruction}\""
-                    ),
-                },
-            ],
-        },
-    ]
-
-
 def _format_chat_messages(
     real_image,
     edited_image,
     instruction: str,
     target: str,
+    include_instruction: bool = True,
 ):
     """Build the full (user, assistant) message pair for training."""
-    user_turn = _format_user_turn(real_image, edited_image, instruction)
+    user_turn = format_user_turn(
+        real_image, edited_image, instruction, include_instruction,
+    )
     return user_turn + [
         {
             "role": "assistant",
@@ -141,10 +116,12 @@ def main(cfg: DictConfig) -> None:
         samples_per_category_per_bin=cfg.samples_per_category_per_bin,
         seed=cfg.seed,
         image_max_side=cfg.image_max_side,
+        include_instruction=cfg.include_instruction,
+        redact_instruction_target=cfg.redact_instruction_target,
     )
     train_ds = EditSleuthCurriculumDataset(
-        triplets_parquet=Path(cfg.triplets_parquet),
-        reasoning_parquet=Path(cfg.reasoning_parquet),
+        annotations_parquet=Path(cfg.annotations_parquet),
+        image_root=Path(cfg.image_root),
         config=ds_config,
     )
     log.info("training dataset: %d examples", len(train_ds))
@@ -306,7 +283,7 @@ def main(cfg: DictConfig) -> None:
         full_messages_list = [
             _format_chat_messages(
                 f["real_image"], f["edited_image"],
-                f["instruction"], f["target"],
+                f["instruction"], f["target"], cfg.include_instruction,
             )
             for f in features
         ]

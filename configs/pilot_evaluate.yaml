@@ -13,12 +13,13 @@ defaults:
   - paths: default
   - _self_
 
-triplets_parquet: ???
-reasoning_parquet: ???
+annotations_parquet: editsleuth_data/release/magicbrush_dev_annotations.parquet
+image_root: ???
 adapter_path: ???
 output_path: ???
 
 target_mode: chain               # ``chain`` or ``label_only``
+include_instruction: true
 base_model: Qwen/Qwen2-VL-2B-Instruct
 
 eval_max_n: null                 # null = full set; else cap at N rows for quick checks

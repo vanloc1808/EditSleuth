@@ -14,16 +14,20 @@ defaults:
   - paths: default
   - _self_
 
-triplets_parquet: ???
-reasoning_parquet: ???
+annotations_parquet: editsleuth_data/release/pico_banana_annotations.parquet
+image_root: ???
 output_dir: ???
 
 # --- target mode (the pilot's only varying knob) -----------------------
 target_mode: chain         # ``chain`` or ``label_only``
+include_instruction: true
+# For a masked chain run, redact Step 1 rather than forcing the model to
+# reconstruct instruction text that is absent from its input.
+redact_instruction_target: true
 
 # --- dataset stratification --------------------------------------------
 samples_per_category_per_bin: 600
-# 11 non-other categories * 3 bins * 600 = 19,800 training examples.
+# 10 Pico-Banana categories * 3 bins * 600 = 18,000 training examples.
 # Reduce for faster iteration; raise for stronger fits.
 seed: 0
 image_max_side: 448
