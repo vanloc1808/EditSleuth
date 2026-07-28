@@ -11,12 +11,9 @@ magicbrush_root="$(cd "$2" && pwd)"
 output_root="$3"
 release_root="${EDITSLEUTH_RELEASE_ROOT:-editsleuth_data/release}"
 
-source "$(conda info --base)/etc/profile.d/conda.sh"
-conda activate base
-
 mkdir -p "$output_root"
 
-CUDA_VISIBLE_DEVICES=0 python scripts/pilot_train.py \
+CUDA_VISIBLE_DEVICES=0 uv run python scripts/pilot_train.py \
   annotations_parquet="$release_root/pico_banana_annotations.parquet" \
   image_root="$pico_root" \
   include_instruction=false \
@@ -25,7 +22,7 @@ CUDA_VISIBLE_DEVICES=0 python scripts/pilot_train.py \
   output_dir="$output_root/chain_instruction_masked" &
 chain_pid=$!
 
-CUDA_VISIBLE_DEVICES=1 python scripts/pilot_train.py \
+CUDA_VISIBLE_DEVICES=1 uv run python scripts/pilot_train.py \
   annotations_parquet="$release_root/pico_banana_annotations.parquet" \
   image_root="$pico_root" \
   include_instruction=false \
@@ -36,7 +33,7 @@ label_pid=$!
 wait "$chain_pid"
 wait "$label_pid"
 
-CUDA_VISIBLE_DEVICES=2 python scripts/pilot_evaluate.py \
+CUDA_VISIBLE_DEVICES=2 uv run python scripts/pilot_evaluate.py \
   annotations_parquet="$release_root/magicbrush_dev_annotations.parquet" \
   image_root="$magicbrush_root" \
   adapter_path="$output_root/chain_instruction_masked" \
@@ -44,7 +41,7 @@ CUDA_VISIBLE_DEVICES=2 python scripts/pilot_evaluate.py \
   target_mode=chain \
   output_path="$output_root/chain_instruction_masked_eval.json"
 
-CUDA_VISIBLE_DEVICES=2 python scripts/pilot_evaluate.py \
+CUDA_VISIBLE_DEVICES=2 uv run python scripts/pilot_evaluate.py \
   annotations_parquet="$release_root/magicbrush_dev_annotations.parquet" \
   image_root="$magicbrush_root" \
   adapter_path="$output_root/label_only_instruction_masked" \

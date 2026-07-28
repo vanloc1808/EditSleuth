@@ -6,11 +6,12 @@ The `external/editsleuth` tree is not used.
 ## 1. Install server dependencies
 
 ```bash
-conda activate base
-pip install -e . gdown
+uv sync
 ```
 
-The server must also have the AWS CLI:
+All server-side Python commands below use the locked uv environment. Conda is
+used only for local inspection on the macOS development machine. The server
+must also have the AWS CLI:
 
 ```bash
 aws --version
@@ -22,7 +23,7 @@ Pass the public Google Drive file ID; do not commit the ID or a generated
 download URL into the repository.
 
 ```bash
-python scripts/setup_editsleuth_release.py \
+uv run python scripts/setup_editsleuth_release.py \
   --file-id GOOGLE_DRIVE_FILE_ID \
   --archive editsleuth_data.tar.gz \
   --output-dir editsleuth_data/release
@@ -37,7 +38,7 @@ the two packed Open Images S3 archives using unsigned AWS CLI requests. Edited
 images and manifests come from Apple's CDN.
 
 ```bash
-python scripts/download_pico_banana.py \
+uv run python scripts/download_pico_banana.py \
   --root /data/pico-banana-400k \
   --workers 16
 ```
@@ -81,7 +82,7 @@ samples_per_category_per_bin=1
 Create a deterministic 67/67/66 easy/medium/hard sample:
 
 ```bash
-python scripts/audit_reasoning_traces.py sample \
+uv run python scripts/audit_reasoning_traces.py sample \
   --input editsleuth_data/release/pico_banana_annotations.parquet \
   --output outputs/rebuttal/trace_audit_200.csv \
   --n 200 \
@@ -97,7 +98,7 @@ For each step, an annotator fills:
 After all judgments are complete:
 
 ```bash
-python scripts/audit_reasoning_traces.py report \
+uv run python scripts/audit_reasoning_traces.py report \
   --input outputs/rebuttal/trace_audit_200.csv \
   --output outputs/rebuttal/trace_audit_200_report.json
 ```
