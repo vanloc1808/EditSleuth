@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +12,11 @@ import pandas as pd
 from PIL import Image
 
 from edit2forensics.pilot_prompt import format_user_turn
+
+
+def log(message: str) -> None:
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{timestamp}] [saliency] {message}", flush=True)
 
 
 def normalize_saliency(values: np.ndarray) -> np.ndarray:
@@ -112,18 +118,23 @@ def main() -> None:
     from peft import PeftModel
     from transformers import AutoProcessor, Qwen2VLForConditionalGeneration
 
+    log(f"Loading annotations from {args.annotations}")
     annotations = pd.read_parquet(args.annotations)
     selected = stratified_sample(annotations, args.n, args.seed)
+    log(f"Selected {len(selected)} stratified examples")
     root = args.image_root.expanduser().resolve()
     output = args.output_dir.expanduser().resolve()
     output.mkdir(parents=True, exist_ok=True)
 
+    log(f"Loading processor from {args.adapter_path}")
     processor = AutoProcessor.from_pretrained(args.adapter_path)
+    log(f"Loading base model {args.base_model}")
     base = Qwen2VLForConditionalGeneration.from_pretrained(
         args.base_model,
         torch_dtype=torch.bfloat16,
         device_map="auto",
     )
+    log(f"Loading LoRA adapter from {args.adapter_path}")
     model = PeftModel.from_pretrained(base, args.adapter_path)
     model.eval()
     for parameter in model.parameters():
@@ -132,6 +143,7 @@ def main() -> None:
     rows = []
     for index, record in enumerate(selected.to_dict("records"), start=1):
         triplet_id = record["triplet_id"]
+        log(f"{index}/{len(selected)} {triplet_id}: loading image pair")
         real = load_image(root / record["real_path"], args.image_max_side)
         edited = load_image(root / record["edited_path"], args.image_max_side)
         messages = format_user_turn(
@@ -144,6 +156,7 @@ def main() -> None:
             text=[prompt], images=[[real, edited]], return_tensors="pt", padding=True,
         ).to(device)
         with torch.no_grad():
+            log(f"{index}/{len(selected)} {triplet_id}: generating label")
             generated = model.generate(
                 **inputs,
                 max_new_tokens=args.max_new_tokens,
@@ -180,6 +193,7 @@ def main() -> None:
             }
         }
         model.zero_grad(set_to_none=True)
+        log(f"{index}/{len(selected)} {triplet_id}: computing input gradient")
         result = model(
             input_ids=full_ids,
             attention_mask=full_attention,
@@ -221,9 +235,9 @@ def main() -> None:
         }
         (sample_dir / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
         rows.append(metadata)
-        print(f"{index}/{len(selected)} {triplet_id}")
+        log(f"{index}/{len(selected)} {triplet_id}: artifacts saved")
     pd.DataFrame(rows).to_parquet(output / "saliency_index.parquet", index=False)
-    print(f"Wrote {len(rows)} saliency examples to {output}")
+    log(f"Wrote {len(rows)} saliency examples to {output}")
 
 
 if __name__ == "__main__":
