@@ -160,16 +160,30 @@ def main() -> None:
             inputs["attention_mask"],
             torch.ones_like(generated_ids, device=device),
         ], dim=1)
+        full_token_type_ids = None
+        if "token_type_ids" in inputs:
+            # The processor emits token types for the prompt only. The
+            # teacher-forced generated suffix consists entirely of text, whose
+            # Qwen2-VL token type is zero. All sequence-shaped inputs must be
+            # extended together or multimodal RoPE indexing sees mismatched
+            # lengths.
+            full_token_type_ids = torch.cat([
+                inputs["token_type_ids"],
+                torch.zeros_like(generated_ids, device=device),
+            ], dim=1)
         pixel_values = inputs["pixel_values"].detach().requires_grad_(True)
         forward_kwargs = {
             key: value
             for key, value in inputs.items()
-            if key not in {"input_ids", "attention_mask", "pixel_values"}
+            if key not in {
+                "input_ids", "attention_mask", "token_type_ids", "pixel_values",
+            }
         }
         model.zero_grad(set_to_none=True)
         result = model(
             input_ids=full_ids,
             attention_mask=full_attention,
+            token_type_ids=full_token_type_ids,
             pixel_values=pixel_values,
             use_cache=False,
             **forward_kwargs,
