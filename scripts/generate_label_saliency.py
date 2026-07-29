@@ -173,23 +173,39 @@ def main() -> None:
             inputs["attention_mask"],
             torch.ones_like(generated_ids, device=device),
         ], dim=1)
-        full_token_type_ids = None
-        if "token_type_ids" in inputs:
-            # The processor emits token types for the prompt only. The
-            # teacher-forced generated suffix consists entirely of text, whose
-            # Qwen2-VL token type is zero. All sequence-shaped inputs must be
-            # extended together or multimodal RoPE indexing sees mismatched
-            # lengths.
-            full_token_type_ids = torch.cat([
-                inputs["token_type_ids"],
+        full_mm_token_type_ids = None
+        if "mm_token_type_ids" in inputs:
+            # Transformers 5.x uses this multimodal-specific field to compute
+            # Qwen2-VL's 3D RoPE positions. The processor supplies it for the
+            # prompt only, so extend it across the teacher-forced text suffix.
+            full_mm_token_type_ids = torch.cat([
+                inputs["mm_token_type_ids"],
                 torch.zeros_like(generated_ids, device=device),
             ], dim=1)
+        if full_mm_token_type_ids is None:
+            raise RuntimeError(
+                "processor did not return mm_token_type_ids required by Qwen2-VL",
+            )
+        if not (
+            full_ids.shape == full_attention.shape == full_mm_token_type_ids.shape
+        ):
+            raise RuntimeError(
+                "teacher-forced input_ids, attention_mask, and "
+                "mm_token_type_ids must have identical shapes",
+            )
+        log(
+            f"{index}/{len(selected)} {triplet_id}: teacher-forced sequence "
+            f"length {full_ids.shape[1]}",
+        )
         pixel_values = inputs["pixel_values"].detach().requires_grad_(True)
         forward_kwargs = {
             key: value
             for key, value in inputs.items()
             if key not in {
-                "input_ids", "attention_mask", "token_type_ids", "pixel_values",
+                "input_ids",
+                "attention_mask",
+                "mm_token_type_ids",
+                "pixel_values",
             }
         }
         model.zero_grad(set_to_none=True)
@@ -197,7 +213,7 @@ def main() -> None:
         result = model(
             input_ids=full_ids,
             attention_mask=full_attention,
-            token_type_ids=full_token_type_ids,
+            mm_token_type_ids=full_mm_token_type_ids,
             pixel_values=pixel_values,
             use_cache=False,
             **forward_kwargs,
