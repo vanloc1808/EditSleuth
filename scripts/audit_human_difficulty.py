@@ -27,7 +27,9 @@ def balanced_sample(df: pd.DataFrame, n: int, seed: int) -> pd.DataFrame:
     selected_indices: list[int] = []
     remaining_by_group: dict[tuple[str, str], list[int]] = {}
     for key, group in groups:
-        indices = group.index.to_numpy()
+        # pandas 3 may expose the Index backing array as read-only. NumPy's
+        # Generator.shuffle mutates in place, so always request a writable copy.
+        indices = group.index.to_numpy(copy=True)
         rng.shuffle(indices)
         take = min(base, len(indices))
         selected_indices.extend(indices[:take].tolist())
